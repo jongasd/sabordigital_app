@@ -7,32 +7,44 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Header from "../components/Header";
 import ProductCard from "../components/ProductCard";
+import ProductDetailModal from "../components/ProductDetailModal";
 import { api } from "../services/api";
 
-export default function HomeScreen({ onAddToCart, cartCount, onOpenOrders }) {
+export default function HomeScreen({
+  onAddToCart,
+  cartCount,
+  onOpenOrders,
+  onOpenAuth,
+  onOpenIpConfig,
+  currentUser,
+  onLogout,
+}) {
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([{ id: "all", name: "Todos" }]);
-  const [selectedCategory, setSelectedCategory] = useState("Todos");
+  const [cardapios, setCardapios] = useState([]);
+  const [selectedFilter, setSelectedFilter] = useState("Todos");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Detail Modal
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+
   const loadData = async () => {
     try {
-      const [dataProducts, dataCategories] = await Promise.all([
+      const [prodsData, cardsData] = await Promise.all([
         api.getProdutos().catch(() => []),
-        api.getCategorias().catch(() => []),
+        api.getCardapios().catch(() => []),
       ]);
 
-      setProducts(dataProducts);
-      if (dataCategories.length > 0) {
-        setCategories([{ id: "all", name: "Todos" }, ...dataCategories]);
-      }
+      setProducts(prodsData || []);
+      setCardapios(cardsData || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -45,20 +57,66 @@ export default function HomeScreen({ onAddToCart, cartCount, onOpenOrders }) {
     loadData();
   }, []);
 
-  const filteredProducts = products.filter((p) => {
-    const matchCat =
-      selectedCategory === "Todos" || p.category === selectedCategory;
-    const matchSearch = p.name
-      ?.toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
+  // Extrair categorias únicas + cardápios
+  const filterOptions = ["Todos"];
+
+  // Adiciona categorias dos produtos
+  products.forEach((p) => {
+    if (p.categoria && !filterOptions.includes(p.categoria)) {
+      filterOptions.push(p.categoria);
+    }
   });
+
+  const filteredProducts = products.filter((p) => {
+    const nome = p.nome || p.name || "";
+    const cat = p.categoria || p.category || "";
+
+    const matchFilter = selectedFilter === "Todos" || cat === selectedFilter;
+    const matchSearch = nome.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchFilter && matchSearch;
+  });
+
+  const handleOpenDetail = (id) => {
+    setSelectedProductId(id);
+    setDetailVisible(true);
+  };
+
+  const handleDeleteProduct = (id, nome) => {
+    Alert.alert(
+      "Remover Produto",
+      `Deseja deletar o produto "${nome}"?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Deletar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.deleteProduto(id);
+              Alert.alert("Sucesso", "Produto deletado!");
+              loadData();
+            } catch (err) {
+              Alert.alert("Erro", err.message || "Não foi possível deletar.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <Header cartCount={cartCount} onOpenOrders={onOpenOrders} />
+      <Header
+        cartCount={cartCount}
+        onOpenOrders={onOpenOrders}
+        onOpenAuth={onOpenAuth}
+        onOpenIpConfig={onOpenIpConfig}
+        currentUser={currentUser}
+        onLogout={onLogout}
+      />
 
       <ScrollView
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -81,33 +139,48 @@ export default function HomeScreen({ onAddToCart, cartCount, onOpenOrders }) {
           />
         </View>
 
-        {/* CATEGORIAS */}
-        <Text style={styles.sectionTitle}>Categorias</Text>
+        {/* CATEGORIAS / FILTROS */}
+        <Text style={styles.sectionTitle}>Filtros & Categorias</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.categoriesContainer}
         >
-          {categories.map((cat) => {
-            const isSelected = selectedCategory === cat.name;
+          {filterOptions.map((filter) => {
+            const isSelected = selectedFilter === filter;
             return (
               <TouchableOpacity
-                key={cat.id || cat.name}
+                key={filter}
                 style={[styles.catCard, isSelected && styles.catCardSelected]}
-                onPress={() => setSelectedCategory(cat.name)}
+                onPress={() => setSelectedFilter(filter)}
               >
                 <Text
                   style={[styles.catText, isSelected && styles.catTextSelected]}
                 >
-                  {cat.name}
+                  {filter}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
 
+        {/* CARDÁPIOS ATIVOS */}
+        {cardapios.length > 0 && (
+          <View style={styles.cardapiosBanner}>
+            <Text style={styles.bannerTitle}>Cardápios Especiais</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {cardapios.map((c) => (
+                <View key={c.id} style={styles.cardapioPill}>
+                  <Ionicons name="restaurant" size={14} color="#FF5722" />
+                  <Text style={styles.cardapioPillText}>{c.nome}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {/* LISTA DE PRODUTOS */}
-        <Text style={styles.sectionTitle}>Cardápio</Text>
+        <Text style={styles.sectionTitle}>Cardápio Principal</Text>
         {loading ? (
           <ActivityIndicator
             color="#FF5722"
@@ -115,19 +188,33 @@ export default function HomeScreen({ onAddToCart, cartCount, onOpenOrders }) {
             style={{ marginTop: 20 }}
           />
         ) : filteredProducts.length === 0 ? (
-          <Text style={styles.emptyText}>
-            Nenhum produto encontrado no banco.
-          </Text>
+          <View style={styles.emptyContainer}>
+            <Ionicons name="nutrition-outline" size={50} color="#CBD5E0" />
+            <Text style={styles.emptyText}>
+              Nenhum produto encontrado na API.
+            </Text>
+          </View>
         ) : (
           filteredProducts.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
               onAddToCart={onAddToCart}
+              onOpenDetail={handleOpenDetail}
+              onDeleteProduct={handleDeleteProduct}
+              isAdmin={currentUser?.papel === "admin"}
             />
           ))
         )}
       </ScrollView>
+
+      {/* MODAL DETALHE DO PRODUTO */}
+      <ProductDetailModal
+        visible={detailVisible}
+        productId={selectedProductId}
+        onClose={() => setDetailVisible(false)}
+        onAddToCart={onAddToCart}
+      />
     </View>
   );
 }
@@ -147,12 +234,13 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, marginLeft: 8 },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     marginLeft: 16,
-    marginBottom: 10,
+    marginBottom: 8,
+    color: "#2D3748",
   },
-  categoriesContainer: { paddingLeft: 16, marginBottom: 16 },
+  categoriesContainer: { paddingLeft: 16, marginBottom: 14 },
   catCard: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -163,7 +251,31 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   catCardSelected: { backgroundColor: "#FF5722", borderColor: "#FF5722" },
-  catText: { color: "#4A5568", fontWeight: "500" },
+  catText: { color: "#4A5568", fontWeight: "500", fontSize: 13 },
   catTextSelected: { color: "#FFF", fontWeight: "bold" },
-  emptyText: { textAlign: "center", color: "#A0AEC0", marginTop: 20 },
+  cardapiosBanner: {
+    backgroundColor: "#FFFEE0",
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#F6E05E",
+  },
+  bannerTitle: { fontSize: 13, fontWeight: "bold", color: "#B7791F", marginBottom: 6 },
+  cardapioPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#ECC94B",
+    gap: 4,
+  },
+  cardapioPillText: { fontSize: 12, color: "#744210", fontWeight: "600" },
+  emptyContainer: { alignItems: "center", marginTop: 30 },
+  emptyText: { textAlign: "center", color: "#A0AEC0", marginTop: 8 },
 });

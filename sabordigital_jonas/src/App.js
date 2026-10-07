@@ -8,12 +8,25 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+
 import HomeScreen from "./screens/HomeScreen";
 import OrdersScreen from "./screens/OrdersScreen";
+import AdminScreen from "./screens/AdminScreen";
+
+import AuthModal from "./components/AuthModal";
+import IpConfigModal from "./components/IpConfigModal";
+import { setAuthToken } from "./services/api";
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState("home");
+  const [currentTab, setCurrentTab] = useState("home"); // "home" | "orders" | "admin"
   const [cart, setCart] = useState([]);
+
+  // Auth User State
+  const [currentUser, setCurrentUser] = useState(null);
+
+  // Modals Visibility
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [ipModalVisible, setIpModalVisible] = useState(false);
 
   const addToCart = (product) => {
     setCart((prevCart) => {
@@ -22,7 +35,7 @@ export default function App() {
         return prevCart.map((item) =>
           item.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
-            : item,
+            : item
         );
       }
       return [...prevCart, { ...product, quantity: 1 }];
@@ -39,12 +52,21 @@ export default function App() {
           }
           return item;
         })
-        .filter(Boolean),
+        .filter(Boolean)
     );
   };
 
-  // Limpa o pedido após finalizar
   const clearCart = () => setCart([]);
+
+  const handleLoginSuccess = (usuario, token) => {
+    setCurrentUser(usuario);
+    setAuthToken(token);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setAuthToken(null);
+  };
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -52,25 +74,36 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFF" />
 
-      {/* Conteúdo da Tela */}
+      {/* TELA ATIVA */}
       <View style={styles.content}>
-        {currentTab === "home" ? (
+        {currentTab === "home" && (
           <HomeScreen
             onAddToCart={addToCart}
             cartCount={cartCount}
             onOpenOrders={() => setCurrentTab("orders")}
+            onOpenAuth={() => setAuthModalVisible(true)}
+            onOpenIpConfig={() => setIpModalVisible(true)}
+            currentUser={currentUser}
+            onLogout={handleLogout}
           />
-        ) : (
+        )}
+
+        {currentTab === "orders" && (
           <OrdersScreen
             cart={cart}
             onUpdateQuantity={updateQuantity}
             onClearCart={clearCart}
             onGoToHome={() => setCurrentTab("home")}
+            currentUser={currentUser}
           />
+        )}
+
+        {currentTab === "admin" && (
+          <AdminScreen currentUser={currentUser} />
         )}
       </View>
 
-      {/* Barra de Navegação Inferior */}
+      {/* BARRA DE NAVEGAÇÃO INFERIOR */}
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={styles.tabItem}
@@ -116,7 +149,41 @@ export default function App() {
             Pedidos
           </Text>
         </TouchableOpacity>
+
+        {currentUser?.papel === "admin" && (
+          <TouchableOpacity
+            style={styles.tabItem}
+            onPress={() => setCurrentTab("admin")}
+          >
+            <Ionicons
+              name={currentTab === "admin" ? "shield-checkmark" : "shield-outline"}
+              size={22}
+              color={currentTab === "admin" ? "#FF5722" : "#888"}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                { color: currentTab === "admin" ? "#FF5722" : "#888" },
+              ]}
+            >
+              Painel Admin
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* MODAL DE AUTENTICAÇÃO */}
+      <AuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        onLoginSuccess={handleLoginSuccess}
+      />
+
+      {/* MODAL DE CONFIGURAÇÃO DE IP DO BACKEND */}
+      <IpConfigModal
+        visible={ipModalVisible}
+        onClose={() => setIpModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }

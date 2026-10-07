@@ -1,27 +1,48 @@
 import React from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { getImageUrl } from "../services/api";
 
-export default function ProductCard({ product, onAddToCart }) {
+export default function ProductCard({
+  product,
+  onAddToCart,
+  onOpenDetail,
+  onDeleteProduct,
+  isAdmin,
+}) {
+  const imageUrl = getImageUrl(product.imagem || product.image);
+  const nome = product.nome || product.name;
+  const descricao = product.descricao || product.description;
+  const preco = Number(product.preco || product.price || 0);
+
   return (
-    <View style={styles.card}>
-      <Image
-        source={{
-          uri:
-            product.image || "https://via.placeholder.com/150?text=Sem+Imagem",
-        }}
-        style={styles.image}
-      />
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.8}
+      onPress={() => onOpenDetail && onOpenDetail(product.id)}
+    >
+      <Image source={{ uri: imageUrl }} style={styles.image} />
       <View style={styles.info}>
-        <Text style={styles.name}>{product.name}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {nome}
+          </Text>
+          {isAdmin && onDeleteProduct && (
+            <TouchableOpacity
+              style={styles.deleteBtn}
+              onPress={() => onDeleteProduct(product.id, nome)}
+            >
+              <Ionicons name="trash-outline" size={18} color="#E53E3E" />
+            </TouchableOpacity>
+          )}
+        </View>
+
         <Text style={styles.desc} numberOfLines={2}>
-          {product.description}
+          {descricao}
         </Text>
 
         <View style={styles.footer}>
-          <Text style={styles.price}>
-            R$ {Number(product.price || 0).toFixed(2)}
-          </Text>
+          <Text style={styles.price}>R$ {preco.toFixed(2)}</Text>
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => onAddToCart(product)}
@@ -31,7 +52,7 @@ export default function ProductCard({ product, onAddToCart }) {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -58,11 +79,18 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     justifyContent: "space-between",
   },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   name: {
     fontSize: 15,
     fontWeight: "bold",
     color: "#1A1D20",
+    flex: 1,
   },
+  deleteBtn: { padding: 2 },
   desc: {
     fontSize: 12,
     color: "#718096",
